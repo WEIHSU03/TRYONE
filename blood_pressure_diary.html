@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>血壓脈搏日記</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@500;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --paper:#EEF2EA;
+    --card:#FBFAF4;
+    --ink:#1E2A26;
+    --ink-soft:#5C6F63;
+    --line:#C9D2C4;
+    --accent-normal:#3E8E74;
+    --accent-normal-bg:#E1EFE8;
+    --accent-warn:#C6912E;
+    --accent-warn-bg:#F5E9CF;
+    --accent-alert:#B8433A;
+    --accent-alert-bg:#F5E0DC;
+    --accent-low:#3E6FA8;
+    --accent-low-bg:#DEE8F3;
+    --pulse-accent:#B8433A;
+    --bp-accent:#3E6FA8;
+    --diary-accent:#7A6A3E;
+    --beat-duration:0.83s;
+    --ecg-duration:6.5s;
+    --radius:14px;
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Noto Sans TC', sans-serif;
+    -webkit-font-smoothing:antialiased;
+    background-image:linear-gradient(var(--line) 1px, transparent 1px);
+    background-size:100% 34px;
+    background-position:0 120px;
+  }
+
+  h1,h2,h3{font-family:'Noto Serif TC', serif; margin:0;}
+  .mono{font-family:'JetBrains Mono', monospace;}
+
+  .page{max-width:720px; margin:0 auto; padding:0 18px 150px;}
+
+  /* ---------- HERO ---------- */
+  .hero{position:relative; padding:34px 4px 22px; overflow:hidden;}
+  .ecg-track{
+    position:relative; width:100%; height:54px; overflow:hidden;
+    mask-image:linear-gradient(90deg, transparent, black 8%, black 92%, transparent);
+    -webkit-mask-image:linear-gradient(90deg, transparent, black 8%, black 92%, transparent);
+  }
+  .ecg-strip{position:absolute; top:0; left:0; display:flex; width:200%; height:100%; animation:ecgScroll var(--ecg-duration) linear infinite;}
+  .ecg-strip svg{width:50%; height:100%; flex-shrink:0;}
+  @keyframes ecgScroll{ from{transform:translateX(0);} to{transform:translateX(-50%);} }
+
+  .hero h1{font-size:26px; font-weight:700; letter-spacing:.02em; margin-top:14px;}
+  .hero .tagline{color:var(--ink-soft); font-size:13.5px; margin:4px 0 18px;}
+
+  .date-row{display:flex; align-items:center; gap:10px; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:10px 14px; width:fit-content;}
+  .date-row label{font-size:13px; color:var(--ink-soft); display:flex; align-items:center; gap:8px;}
+  .date-row input[type=date]{font-family:'JetBrains Mono', monospace; font-size:14px; border:none; background:transparent; color:var(--ink);}
+
+  /* ---------- CARDS ---------- */
+  .card{background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:20px 20px 22px; margin-bottom:16px; box-shadow:0 1px 0 rgba(30,42,38,0.03);}
+  .card-head{display:flex; align-items:flex-start; gap:14px; margin-bottom:16px;}
+  .card-head .titles{flex:1;}
+  .card-head h2{font-size:19px;}
+  .card-head .sub{color:var(--ink-soft); font-size:12.5px; margin-top:3px;}
+  .icon-badge{width:40px; height:40px; flex-shrink:0; display:flex; align-items:center; justify-content:center;}
+
+  .status-pill{align-self:center; font-family:'JetBrains Mono', monospace; font-size:12px; font-weight:600; padding:5px 11px; border-radius:999px; white-space:nowrap;}
+  .status-normal{color:var(--accent-normal); background:var(--accent-normal-bg);}
+  .status-warn{color:var(--accent-warn); background:var(--accent-warn-bg);}
+  .status-alert{color:var(--accent-alert); background:var(--accent-alert-bg);}
+  .status-low{color:var(--accent-low); background:var(--accent-low-bg);}
+  .status-off{color:var(--ink-soft); background:var(--paper);}
+
+  /* ---------- entry form ---------- */
+  .edit-banner{
+    display:none; align-items:center; justify-content:space-between; gap:10px;
+    background:var(--accent-warn-bg); color:var(--accent-warn);
+    border-radius:10px; padding:9px 14px; margin-bottom:16px; font-size:13px; font-weight:600;
+  }
+  .edit-banner.show{display:flex;}
+  .edit-banner button{border:none; background:transparent; color:var(--accent-warn); text-decoration:underline; font-weight:700; cursor:pointer; font-size:13px;}
+
+  .time-row{display:flex; align-items:center; gap:10px; margin-bottom:18px;}
+  .time-row label{font-size:13px; color:var(--ink-soft);}
+  .time-row input[type=time]{font-family:'JetBrains Mono', monospace; font-size:15px; border:1px solid var(--line); border-radius:8px; padding:7px 10px; background:var(--paper); color:var(--ink);}
+
+  .subsection{border-top:1px solid var(--line); padding-top:16px; margin-top:16px;}
+  .subsection:first-of-type{border-top:none; padding-top:0; margin-top:0;}
+  .sub-head{display:flex; align-items:center; gap:12px; margin-bottom:12px;}
+  .sub-head .titles{flex:1;}
+  .sub-head h3{font-size:15.5px; font-family:'Noto Serif TC', serif;}
+  .toggle-wrap{display:flex; align-items:center; gap:7px; font-size:12.5px; color:var(--ink-soft); cursor:pointer; user-select:none;}
+  .toggle-wrap input{width:16px; height:16px; accent-color:var(--ink);}
+
+  .slider-row{margin-bottom:14px;}
+  .slider-row:last-child{margin-bottom:0;}
+  .slider-row .label-line{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px;}
+  .slider-row .label-line span.name{font-size:13px; color:var(--ink);}
+  .slider-row .value-wrap{display:flex; align-items:baseline; gap:3px;}
+  .slider-row input[type=number]{width:48px; text-align:right; font-family:'JetBrains Mono', monospace; font-size:15px; font-weight:600; border:none; background:transparent; color:var(--ink); -moz-appearance:textfield;}
+  .slider-row input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none; margin:0;}
+  .slider-row .unit{font-size:11px; color:var(--ink-soft);}
+
+  input[type=range]{-webkit-appearance:none; appearance:none; width:100%; height:4px; border-radius:2px; background:var(--line); outline:none;}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; width:18px; height:18px; border-radius:50%; background:var(--slider-color, var(--ink)); border:3px solid var(--card); box-shadow:0 0 0 1.5px var(--slider-color, var(--ink)); cursor:pointer; margin-top:-7px;}
+  input[type=range]::-moz-range-thumb{width:16px; height:16px; border-radius:50%; background:var(--slider-color, var(--ink)); border:3px solid var(--card); box-shadow:0 0 0 1.5px var(--slider-color, var(--ink)); cursor:pointer;}
+  input[type=range]::-webkit-slider-runnable-track{height:4px; border-radius:2px;}
+  #bpFields input[type=range]{--slider-color:var(--bp-accent);}
+  #pulseFields input[type=range]{--slider-color:var(--pulse-accent);}
+
+  .range-hint{font-size:11px; color:var(--ink-soft); margin-top:8px;}
+  .fields-body{display:none;}
+  .fields-body.show{display:block;}
+
+  #diaryText{width:100%; min-height:110px; border:none; resize:vertical; background:transparent; font-family:'Noto Sans TC', sans-serif; font-size:14.5px; line-height:32px; color:var(--ink); background-image:linear-gradient(var(--line) 1px, transparent 1px); background-size:100% 32px; padding-top:2px;}
+  #diaryText:focus{outline:none;}
+
+  .save-row{margin-top:20px; display:flex; gap:10px; flex-wrap:wrap;}
+  .save-row .btn{flex:1;}
+
+  /* ---------- entry list ---------- */
+  .list-card h2{font-size:16px; margin-bottom:4px;}
+  .list-card .sub{color:var(--ink-soft); font-size:12px; margin-bottom:14px;}
+  .entry-list{display:flex; flex-direction:column; gap:8px;}
+  .list-empty{color:var(--ink-soft); font-size:13px; padding:8px 0;}
+  .entry-row{display:flex; align-items:center; gap:10px; border:1px solid var(--line); border-radius:10px; padding:10px 12px; cursor:pointer; transition:background .15s;}
+  .entry-row:hover{background:var(--accent-normal-bg);}
+  .entry-row .etime{font-family:'JetBrains Mono', monospace; font-size:13px; width:48px; flex-shrink:0; font-weight:700;}
+  .entry-row .ebody{flex:1; min-width:0;}
+  .entry-row .ebp{font-family:'JetBrains Mono', monospace; font-size:12px; color:var(--ink-soft);}
+  .entry-row .ediary{font-size:12px; color:var(--ink-soft); margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .entry-row .edel{border:none; background:transparent; color:var(--ink-soft); font-size:15px; cursor:pointer; padding:2px 6px; border-radius:6px; flex-shrink:0;}
+  .entry-row .edel:hover{color:var(--accent-alert); background:var(--accent-alert-bg);}
+
+  /* ---------- backup row ---------- */
+  .backup-row{display:flex; gap:10px; justify-content:center; margin:6px 0 4px; flex-wrap:wrap;}
+  .backup-row .btn-link{font-size:12.5px; color:var(--ink-soft); background:transparent; border:1px solid var(--line); border-radius:999px; padding:7px 14px; cursor:pointer;}
+  .backup-row .btn-link:hover{border-color:var(--ink); color:var(--ink);}
+
+  /* ---------- MODAL ---------- */
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(30,42,38,0.45);
+    display:none; align-items:center; justify-content:center; padding:20px; z-index:50;
+  }
+  .modal-overlay.show{display:flex;}
+  .modal-box{
+    background:var(--card); border-radius:16px; padding:22px 22px 20px;
+    max-width:360px; width:100%; box-shadow:0 12px 40px rgba(30,42,38,0.25);
+  }
+  .modal-box h2{font-size:18px; margin-bottom:6px;}
+  .modal-box .sub{color:var(--ink-soft); font-size:12.5px; margin-bottom:18px;}
+  .modal-range-row{display:flex; align-items:center; gap:10px; margin-bottom:12px;}
+  .modal-range-row label{font-size:13px; color:var(--ink-soft); width:64px; flex-shrink:0;}
+  .modal-range-row input[type=date]{
+    flex:1; font-family:'JetBrains Mono', monospace; font-size:14px;
+    border:1px solid var(--line); border-radius:8px; padding:8px 10px; background:var(--paper); color:var(--ink);
+  }
+  .modal-count{font-size:12px; color:var(--ink-soft); margin:6px 0 18px;}
+  .modal-actions{display:flex; gap:10px;}
+  .modal-actions .btn{flex:1; padding:12px 16px; font-size:14px;}
+
+  /* ---------- ACTION BAR ---------- */
+  .action-bar{position:fixed; left:0; right:0; bottom:0; display:flex; justify-content:center; gap:12px; padding:14px 16px calc(14px + env(safe-area-inset-bottom)); background:linear-gradient(to top, var(--paper) 65%, transparent);}
+  .btn{font-family:'Noto Sans TC', sans-serif; font-size:14.5px; font-weight:700; padding:13px 22px; border-radius:11px; border:none; cursor:pointer; transition:transform .1s, opacity .15s;}
+  .btn:active{transform:scale(0.97);}
+  .btn-primary{background:var(--ink); color:var(--paper);}
+  .btn-secondary{background:var(--card); color:var(--ink); border:1.5px solid var(--ink);}
+  .btn:disabled{opacity:.5; cursor:default;}
+
+  .toast{position:fixed; left:50%; bottom:82px; transform:translateX(-50%) translateY(8px); background:var(--ink); color:var(--paper); font-size:13px; padding:9px 16px; border-radius:999px; opacity:0; pointer-events:none; transition:opacity .2s, transform .2s; max-width:88%; text-align:center; z-index:20;}
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+  .toast.error{background:var(--accent-alert);}
+
+  /* ---------- ICONS / MOTION ---------- */
+  .beat-heart{animation:beatScale var(--beat-duration) ease-in-out infinite;}
+  @keyframes beatScale{0%{transform:scale(1);} 14%{transform:scale(1.16);} 28%{transform:scale(0.98);} 42%{transform:scale(1.1);} 60%{transform:scale(1);} 100%{transform:scale(1);}}
+  .cuff-needle{transform-origin:22px 24px; animation:needleSwing 2.4s ease-in-out infinite;}
+  @keyframes needleSwing{0%,100%{transform:rotate(-14deg);} 50%{transform:rotate(12deg);}}
+  .pencil-line{stroke-dasharray:30; stroke-dashoffset:30; animation:writeLine 2.6s ease-in-out infinite;}
+  @keyframes writeLine{0%{stroke-dashoffset:30;} 45%{stroke-dashoffset:0;} 70%{stroke-dashoffset:0;} 100%{stroke-dashoffset:-30;}}
+
+  @media (prefers-reduced-motion: reduce){.beat-heart, .cuff-needle, .pencil-line, .ecg-strip{animation:none !important;}}
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  <header class="hero">
+    <div class="ecg-track">
+      <div class="ecg-strip" id="ecgStrip">
+        <svg viewBox="0 0 400 54" preserveAspectRatio="none"><polyline points="0,27 60,27 78,27 88,8 98,46 108,14 118,27 400,27" fill="none" stroke="#B8433A" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>
+        <svg viewBox="0 0 400 54" preserveAspectRatio="none"><polyline points="0,27 60,27 78,27 88,8 98,46 108,14 118,27 400,27" fill="none" stroke="#B8433A" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>
+      </div>
+    </div>
+    <h1>血壓脈搏日記</h1>
+    <p class="tagline">想到就記，一天可以記錄好幾次</p>
+    <div class="date-row">
+      <label>檢視日期 <input type="date" id="dateInput"></label>
+    </div>
+  </header>
+
+  <main>
+    <!-- 新增 / 編輯 紀錄 -->
+    <section class="card" id="formCard">
+      <div class="edit-banner" id="editBanner">
+        <span id="editBannerText">正在編輯這筆紀錄</span>
+        <button type="button" id="cancelEditBtn">取消編輯，改為新增</button>
+      </div>
+
+      <div class="time-row">
+        <label for="timeInput">紀錄時間</label>
+        <input type="time" id="timeInput">
+      </div>
+
+      <!-- 血壓 -->
+      <div class="subsection">
+        <div class="sub-head">
+          <span class="icon-badge" aria-hidden="true">
+            <svg width="36" height="36" viewBox="0 0 44 44">
+              <circle cx="22" cy="24" r="15" fill="none" stroke="#3E6FA8" stroke-width="2.5"/>
+              <g class="cuff-needle"><line x1="22" y1="24" x2="22" y2="12" stroke="#3E6FA8" stroke-width="2.5" stroke-linecap="round"/></g>
+              <circle cx="22" cy="24" r="2" fill="#3E6FA8"/>
+              <path d="M14 6 h16" stroke="#3E6FA8" stroke-width="2.5" stroke-linecap="round"/>
+            </svg>
+          </span>
+          <div class="titles"><h3>血壓</h3></div>
+          <label class="toggle-wrap"><input type="checkbox" id="hasBP" checked>本次有測</label>
+          <span class="status-pill status-normal" id="bpStatusPill">正常</span>
+        </div>
+        <div class="fields-body show" id="bpFields">
+          <div class="slider-row">
+            <div class="label-line"><span class="name">收縮壓</span><div class="value-wrap"><input type="number" id="sys" min="70" max="220" value="120"><span class="unit">mmHg</span></div></div>
+            <input type="range" id="sysRange" min="70" max="220" value="120">
+          </div>
+          <div class="slider-row">
+            <div class="label-line"><span class="name">舒張壓</span><div class="value-wrap"><input type="number" id="dia" min="40" max="130" value="80"><span class="unit">mmHg</span></div></div>
+            <input type="range" id="diaRange" min="40" max="130" value="80">
+          </div>
+          <p class="range-hint">正常參考：收縮壓 &lt;120 且舒張壓 &lt;80；≥140 或 ≥90 視為異常偏高</p>
+        </div>
+      </div>
+
+      <!-- 脈搏 -->
+      <div class="subsection">
+        <div class="sub-head">
+          <span class="icon-badge" aria-hidden="true">
+            <svg class="beat-heart" width="32" height="32" viewBox="0 0 44 44">
+              <path d="M22 37 C10 28, 4 20, 4 13.5 C4 7, 9 3, 14.5 3 C18.5 3, 21 5.5, 22 8 C23 5.5, 25.5 3, 29.5 3 C35 3, 40 7, 40 13.5 C40 20, 34 28, 22 37 Z" fill="#B8433A"/>
+            </svg>
+          </span>
+          <div class="titles"><h3>心搏 / 脈搏</h3></div>
+          <label class="toggle-wrap"><input type="checkbox" id="hasPulse" checked>本次有測</label>
+        </div>
+        <div class="fields-body show" id="pulseFields">
+          <div class="slider-row">
+            <div class="label-line"><span class="name">脈搏</span><div class="value-wrap"><input type="number" id="pulse" min="40" max="160" value="72"><span class="unit">bpm</span></div></div>
+            <input type="range" id="pulseRange" min="40" max="160" value="72">
+          </div>
+          <p class="range-hint">一般成人靜息心率參考範圍：60–100 bpm</p>
+        </div>
+      </div>
+
+      <!-- 日記 -->
+      <div class="subsection">
+        <div class="sub-head">
+          <span class="icon-badge" aria-hidden="true">
+            <svg width="32" height="32" viewBox="0 0 44 44">
+              <path d="M8 33 L27 14 L33 20 L14 39 L7 40 Z" fill="none" stroke="#7A6A3E" stroke-width="2.2" stroke-linejoin="round"/>
+              <line class="pencil-line" x1="10" y1="36" x2="34" y2="12" stroke="#7A6A3E" stroke-width="1.4" stroke-dasharray="30"/>
+            </svg>
+          </span>
+          <div class="titles"><h3>當下感受 / 日記</h3></div>
+        </div>
+        <textarea id="diaryText" placeholder="這次的感受、症狀、用藥或睡眠狀況…（選填）"></textarea>
+      </div>
+
+      <div class="save-row">
+        <button class="btn btn-primary" id="saveBtn" style="flex:2;">新增這筆紀錄</button>
+      </div>
+    </section>
+
+    <!-- 本日紀錄 -->
+    <section class="card list-card">
+      <h2>本日紀錄</h2>
+      <p class="sub">點選任一筆可載入編輯；已上傳的資料都能修改</p>
+      <div class="entry-list" id="entryList"><p class="list-empty">尚無紀錄</p></div>
+    </section>
+
+    <div class="backup-row">
+      <button class="btn-link" id="exportBtn">匯出備份 (JSON)</button>
+      <button class="btn-link" id="importBtn">匯入備份</button>
+      <input type="file" id="importFile" accept="application/json" style="display:none;">
+    </div>
+  </main>
+
+</div>
+
+<div class="action-bar">
+  <button class="btn btn-secondary" id="reportBtn">生成報表 (Excel)</button>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<div class="modal-overlay" id="exportModal">
+  <div class="modal-box">
+    <h2>選擇匯出區間</h2>
+    <p class="sub">報表將列出區間內每一筆紀錄（每筆各佔一列）</p>
+    <div class="modal-range-row">
+      <label for="exportFrom">從</label>
+      <input type="date" id="exportFrom">
+    </div>
+    <div class="modal-range-row">
+      <label for="exportTo">到</label>
+      <input type="date" id="exportTo">
+    </div>
+    <p class="modal-count" id="exportCount"></p>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" id="exportCancelBtn">取消</button>
+      <button class="btn btn-primary" id="exportConfirmBtn">匯出試算表</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+
+  const dateInput = $('dateInput');
+  const timeInput = $('timeInput');
+  const hasBP = $('hasBP'), hasPulse = $('hasPulse');
+  const bpFields = $('bpFields'), pulseFields = $('pulseFields');
+  const diaryText = $('diaryText');
+  const bpStatusPill = $('bpStatusPill');
+  const saveBtn = $('saveBtn');
+  const reportBtn = $('reportBtn');
+  const entryList = $('entryList');
+  const toastEl = $('toast');
+  const editBanner = $('editBanner');
+  const editBannerText = $('editBannerText');
+  const cancelEditBtn = $('cancelEditBtn');
+  const exportBtn = $('exportBtn');
+  const importBtn = $('importBtn');
+  const importFile = $('importFile');
+
+  const exportModal = $('exportModal');
+  const exportFrom = $('exportFrom');
+  const exportTo = $('exportTo');
+  const exportCount = $('exportCount');
+  const exportCancelBtn = $('exportCancelBtn');
+  const exportConfirmBtn = $('exportConfirmBtn');
+
+  const STORAGE_PREFIX = 'bp_diary:'; // localStorage key = bp_diary:YYYY-MM-DD -> JSON array of entries
+
+  let editingId = null; // if set, Save updates this entry instead of creating a new one
+
+  // ---------- storage availability check ----------
+  let storageOK = true;
+  try{
+    const t = '__bp_diary_test__';
+    localStorage.setItem(t, '1');
+    localStorage.removeItem(t);
+  }catch(e){ storageOK = false; }
+
+  function todayStr(){ return new Date().toLocaleDateString('sv-SE'); }
+  function nowTimeStr(){
+    const d = new Date();
+    return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+  }
+
+  function showToast(msg, type){
+    toastEl.textContent = msg;
+    toastEl.className = 'toast show' + (type === 'error' ? ' error' : '');
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(() => toastEl.classList.remove('show'), 2800);
+  }
+
+  // ---------- localStorage helpers ----------
+  function getDayEntries(date){
+    if (!storageOK) return [];
+    try{
+      const raw = localStorage.getItem(STORAGE_PREFIX + date);
+      return raw ? JSON.parse(raw) : [];
+    }catch(e){ return []; }
+  }
+  function setDayEntries(date, entries){
+    entries.sort((a,b) => (a.time || '').localeCompare(b.time || ''));
+    localStorage.setItem(STORAGE_PREFIX + date, JSON.stringify(entries));
+  }
+  function allDates(){
+    const dates = [];
+    for (let i = 0; i < localStorage.length; i++){
+      const k = localStorage.key(i);
+      if (k && k.startsWith(STORAGE_PREFIX)) dates.push(k.slice(STORAGE_PREFIX.length));
+    }
+    return dates.sort();
+  }
+
+  // ---------- slider <-> number sync ----------
+  function syncPair(numId, rangeId, onChange){
+    const num = $(numId), range = $(rangeId);
+    const clamp = v => Math.min(+range.max, Math.max(+range.min, v));
+    num.addEventListener('input', () => { range.value = clamp(+num.value || 0); onChange && onChange(); });
+    num.addEventListener('blur', () => { num.value = range.value; });
+    range.addEventListener('input', () => { num.value = range.value; onChange && onChange(); });
+  }
+  syncPair('sys', 'sysRange', updateBPStatus);
+  syncPair('dia', 'diaRange', updateBPStatus);
+  syncPair('pulse', 'pulseRange', updateBeatSpeed);
+
+  function getVal(id){ return Number($(id).value); }
+
+  hasBP.addEventListener('change', () => {
+    bpFields.classList.toggle('show', hasBP.checked);
+    updateBPStatus();
+  });
+  hasPulse.addEventListener('change', () => {
+    pulseFields.classList.toggle('show', hasPulse.checked);
+    updateBeatSpeed();
+  });
+
+  // ---------- classification ----------
+  function classifyBP(sys, dia){
+    if (sys < 90 || dia < 60) return { label: '偏低', cls: 'status-low' };
+    if (sys >= 140 || dia >= 90) return { label: '異常(高血壓)', cls: 'status-alert' };
+    if (sys >= 120 || dia >= 80) return { label: '偏高', cls: 'status-warn' };
+    return { label: '正常', cls: 'status-normal' };
+  }
+
+  function updateBPStatus(){
+    if (!hasBP.checked){
+      bpStatusPill.textContent = '未記錄';
+      bpStatusPill.className = 'status-pill status-off';
+      return;
+    }
+    const r = classifyBP(getVal('sys'), getVal('dia'));
+    bpStatusPill.textContent = r.label;
+    bpStatusPill.className = 'status-pill ' + r.cls;
+  }
+
+  function updateBeatSpeed(){
+    const p = hasPulse.checked ? getVal('pulse') : 72;
+    const beat = Math.min(2.2, Math.max(0.5, 60 / (p || 72)));
+    document.documentElement.style.setProperty('--beat-duration', beat + 's');
+    document.documentElement.style.setProperty('--ecg-duration', (beat * 7.5) + 's');
+  }
+
+  // ---------- form <-> entry ----------
+  function resetFormForNewEntry(){
+    editingId = null;
+    editBanner.classList.remove('show');
+    saveBtn.textContent = '新增這筆紀錄';
+    timeInput.value = nowTimeStr();
+    hasBP.checked = true; bpFields.classList.add('show');
+    hasPulse.checked = true; pulseFields.classList.add('show');
+    $('sys').value = 120; $('sysRange').value = 120;
+    $('dia').value = 80; $('diaRange').value = 80;
+    $('pulse').value = 72; $('pulseRange').value = 72;
+    diaryText.value = '';
+    updateBPStatus();
+    updateBeatSpeed();
+  }
+
+  function loadEntryIntoForm(entry){
+    editingId = entry.id;
+    editBanner.classList.add('show');
+    editBannerText.textContent = `正在編輯 ${entry.time} 的紀錄`;
+    saveBtn.textContent = '更新這筆紀錄';
+    timeInput.value = entry.time || nowTimeStr();
+    hasBP.checked = !!entry.hasBP; bpFields.classList.toggle('show', hasBP.checked);
+    hasPulse.checked = !!entry.hasPulse; pulseFields.classList.toggle('show', hasPulse.checked);
+    if (entry.hasBP){ $('sys').value = entry.sys; $('sysRange').value = entry.sys; $('dia').value = entry.dia; $('diaRange').value = entry.dia; }
+    if (entry.hasPulse){ $('pulse').value = entry.pulse; $('pulseRange').value = entry.pulse; }
+    diaryText.value = entry.diary || '';
+    updateBPStatus();
+    updateBeatSpeed();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  cancelEditBtn.addEventListener('click', resetFormForNewEntry);
+
+  function buildEntryFromForm(){
+    return {
+      id: editingId || (Date.now() + '_' + Math.random().toString(36).slice(2,8)),
+      time: timeInput.value || nowTimeStr(),
+      hasBP: hasBP.checked,
+      sys: hasBP.checked ? getVal('sys') : null,
+      dia: hasBP.checked ? getVal('dia') : null,
+      hasPulse: hasPulse.checked,
+      pulse: hasPulse.checked ? getVal('pulse') : null,
+      diary: diaryText.value.trim(),
+      savedAt: new Date().toISOString()
+    };
+  }
+
+  function saveEntry(){
+    if (!storageOK){
+      showToast('這台瀏覽器無法使用本機儲存（可能在無痕模式），請改用一般瀏覽模式', 'error');
+      return;
+    }
+    if (!dateInput.value){ showToast('請先選擇日期', 'error'); return; }
+    const entry = buildEntryFromForm();
+    if (!entry.hasBP && !entry.hasPulse && !entry.diary){
+      showToast('請至少填寫血壓、脈搏或日記其中一項', 'error');
+      return;
+    }
+    try{
+      const date = dateInput.value;
+      let entries = getDayEntries(date);
+      if (editingId){
+        entries = entries.map(e => e.id === editingId ? entry : e);
+      } else {
+        entries.push(entry);
+      }
+      setDayEntries(date, entries);
+      showToast(editingId ? '已更新這筆紀錄' : '已新增這筆紀錄');
+      resetFormForNewEntry();
+      refreshEntryList();
+    }catch(e){
+      console.error(e);
+      showToast('儲存失敗，請再試一次', 'error');
+    }
+  }
+
+  function deleteEntry(date, id, ev){
+    ev.stopPropagation();
+    if (!confirm('確定要刪除這筆紀錄嗎？')) return;
+    try{
+      const entries = getDayEntries(date).filter(e => e.id !== id);
+      setDayEntries(date, entries);
+      if (editingId === id) resetFormForNewEntry();
+      showToast('已刪除');
+      refreshEntryList();
+    }catch(e){
+      showToast('刪除失敗', 'error');
+    }
+  }
+
+  function refreshEntryList(){
+    const date = dateInput.value;
+    const entries = getDayEntries(date);
+    entryList.innerHTML = '';
+    if (entries.length === 0){
+      entryList.innerHTML = '<p class="list-empty">尚無紀錄</p>';
+      return;
+    }
+    entries.forEach(entry => {
+      const row = document.createElement('div');
+      row.className = 'entry-row';
+      row.addEventListener('click', () => loadEntryIntoForm(entry));
+
+      const timeEl = document.createElement('span');
+      timeEl.className = 'etime';
+      timeEl.textContent = entry.time;
+
+      const bodyEl = document.createElement('div');
+      bodyEl.className = 'ebody';
+
+      const bpLine = document.createElement('div');
+      bpLine.className = 'ebp';
+      let parts = [];
+      if (entry.hasBP){
+        const st = classifyBP(entry.sys, entry.dia);
+        parts.push(`血壓 ${entry.sys}/${entry.dia} (${st.label})`);
+      }
+      if (entry.hasPulse) parts.push(`脈搏 ${entry.pulse}`);
+      bpLine.textContent = parts.length ? parts.join(' · ') : '（僅日記）';
+      bodyEl.appendChild(bpLine);
+
+      if (entry.diary){
+        const dLine = document.createElement('div');
+        dLine.className = 'ediary';
+        dLine.textContent = entry.diary;
+        bodyEl.appendChild(dLine);
+      }
+
+      const delBtn = document.createElement('button');
+      delBtn.className = 'edel';
+      delBtn.textContent = '✕';
+      delBtn.title = '刪除這筆紀錄';
+      delBtn.addEventListener('click', (ev) => deleteEntry(date, entry.id, ev));
+
+      row.appendChild(timeEl);
+      row.appendChild(bodyEl);
+      row.appendChild(delBtn);
+      entryList.appendChild(row);
+    });
+  }
+
+  // ---------- report ----------
+  function entriesInRange(from, to){
+    // returns a flat, chronologically-sorted list of {date, ...entry}
+    const rows = [];
+    allDates().forEach(date => {
+      if (date < from || date > to) return;
+      getDayEntries(date).forEach(e => rows.push(Object.assign({ date }, e)));
+    });
+    rows.sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+    return rows;
+  }
+
+  function countInRange(){
+    const from = exportFrom.value, to = exportTo.value;
+    if (!from || !to){ exportCount.textContent = ''; return; }
+    if (from > to){ exportCount.textContent = '「從」的日期不能晚於「到」的日期'; return; }
+    const n = entriesInRange(from, to).length;
+    exportCount.textContent = `這段期間共有 ${n} 筆紀錄`;
+  }
+  exportFrom.addEventListener('change', countInRange);
+  exportTo.addEventListener('change', countInRange);
+
+  function openExportModal(){
+    const dates = allDates();
+    if (dates.length === 0){
+      showToast('尚無資料可匯出', 'error');
+      return;
+    }
+    exportFrom.value = dates[0];
+    exportTo.value = dates[dates.length - 1];
+    countInRange();
+    exportModal.classList.add('show');
+  }
+  function closeExportModal(){ exportModal.classList.remove('show'); }
+
+  exportCancelBtn.addEventListener('click', closeExportModal);
+  exportModal.addEventListener('click', (ev) => { if (ev.target === exportModal) closeExportModal(); });
+
+  function generateReport(from, to){
+    exportConfirmBtn.disabled = true;
+    const original = exportConfirmBtn.textContent;
+    exportConfirmBtn.textContent = '產生中…';
+    try{
+      const rows = entriesInRange(from, to);
+      if (rows.length === 0){
+        showToast('這段期間沒有資料', 'error');
+        return;
+      }
+      const sheet = [['日期','時間','血壓','脈搏','血壓正常與否','日記']];
+      rows.forEach(e => {
+        const bpStr = e.hasBP ? `${e.sys}/${e.dia}` : '—';
+        const pulseStr = e.hasPulse ? e.pulse : '—';
+        const statusStr = e.hasBP ? classifyBP(e.sys, e.dia).label : '—';
+        sheet.push([e.date, e.time, bpStr, pulseStr, statusStr, e.diary || '']);
+      });
+
+      const ws = XLSX.utils.aoa_to_sheet(sheet);
+      ws['!cols'] = [{wch:12},{wch:8},{wch:10},{wch:8},{wch:16},{wch:40}];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, '血壓脈搏紀錄');
+      XLSX.writeFile(wb, `血壓脈搏日記_${from}_至_${to}.xlsx`);
+      showToast('報表已下載');
+      closeExportModal();
+    }catch(e){
+      console.error(e);
+      showToast('生成報表失敗，請再試一次', 'error');
+    }finally{
+      exportConfirmBtn.disabled = false;
+      exportConfirmBtn.textContent = original;
+    }
+  }
+
+  exportConfirmBtn.addEventListener('click', () => {
+    const from = exportFrom.value, to = exportTo.value;
+    if (!from || !to){ showToast('請選擇起訖日期', 'error'); return; }
+    if (from > to){ showToast('「從」的日期不能晚於「到」的日期', 'error'); return; }
+    generateReport(from, to);
+  });
+
+  // ---------- backup ----------
+  function exportBackup(){
+    try{
+      const data = {};
+      allDates().forEach(date => { data[date] = getDayEntries(date); });
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `血壓脈搏日記備份_${todayStr()}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast('備份已下載');
+    }catch(e){
+      showToast('匯出失敗', 'error');
+    }
+  }
+
+  function importBackupFile(file){
+    const reader = new FileReader();
+    reader.onload = () => {
+      try{
+        const data = JSON.parse(reader.result);
+        let count = 0;
+        Object.keys(data).forEach(date => {
+          if (Array.isArray(data[date])){
+            const existing = getDayEntries(date);
+            const merged = [...existing];
+            data[date].forEach(e => {
+              if (!merged.some(m => m.id === e.id)) merged.push(e);
+            });
+            setDayEntries(date, merged);
+            count += data[date].length;
+          }
+        });
+        showToast(`已匯入 ${count} 筆紀錄`);
+        refreshEntryList();
+      }catch(e){
+        showToast('備份檔格式錯誤，匯入失敗', 'error');
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  // ---------- events ----------
+  saveBtn.addEventListener('click', saveEntry);
+  reportBtn.addEventListener('click', openExportModal);
+  dateInput.addEventListener('change', () => { resetFormForNewEntry(); refreshEntryList(); });
+  exportBtn.addEventListener('click', exportBackup);
+  importBtn.addEventListener('click', () => importFile.click());
+  importFile.addEventListener('change', () => {
+    if (importFile.files[0]) importBackupFile(importFile.files[0]);
+    importFile.value = '';
+  });
+
+  // ---------- init ----------
+  if (!storageOK){
+    showToast('無法使用本機儲存，資料將無法儲存（請確認未使用無痕模式）', 'error');
+  }
+  dateInput.value = todayStr();
+  resetFormForNewEntry();
+  refreshEntryList();
+})();
+</script>
+
+</body>
+</html>

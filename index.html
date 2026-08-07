@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>血壓脈搏日記</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@500;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --paper:#EEF2EA;
+    --card:#FBFAF4;
+    --ink:#1E2A26;
+    --ink-soft:#5C6F63;
+    --line:#C9D2C4;
+    --accent-normal:#3E8E74;
+    --accent-normal-bg:#E1EFE8;
+    --accent-warn:#C6912E;
+    --accent-warn-bg:#F5E9CF;
+    --accent-alert:#B8433A;
+    --accent-alert-bg:#F5E0DC;
+    --accent-low:#3E6FA8;
+    --accent-low-bg:#DEE8F3;
+    --pulse-accent:#B8433A;
+    --bp-accent:#3E6FA8;
+    --diary-accent:#7A6A3E;
+    --beat-duration:0.83s;
+    --ecg-duration:6.5s;
+    --radius:14px;
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Noto Sans TC', sans-serif;
+    -webkit-font-smoothing:antialiased;
+    background-image:
+      linear-gradient(var(--line) 1px, transparent 1px);
+    background-size:100% 34px;
+    background-position:0 120px;
+  }
+
+  h1,h2,h3{font-family:'Noto Serif TC', serif; margin:0;}
+  .mono{font-family:'JetBrains Mono', monospace;}
+
+  .page{max-width:720px; margin:0 auto; padding:0 18px 120px;}
+
+  /* ---------- HERO ---------- */
+  .hero{
+    position:relative;
+    padding:34px 4px 22px;
+    overflow:hidden;
+  }
+  .ecg-track{
+    position:relative;
+    width:100%;
+    height:54px;
+    overflow:hidden;
+    mask-image:linear-gradient(90deg, transparent, black 8%, black 92%, transparent);
+    -webkit-mask-image:linear-gradient(90deg, transparent, black 8%, black 92%, transparent);
+  }
+  .ecg-strip{
+    position:absolute; top:0; left:0;
+    display:flex;
+    width:200%;
+    height:100%;
+    animation:ecgScroll var(--ecg-duration) linear infinite;
+  }
+  .ecg-strip svg{width:50%; height:100%; flex-shrink:0;}
+  @keyframes ecgScroll{ from{transform:translateX(0);} to{transform:translateX(-50%);} }
+
+  .hero h1{font-size:26px; font-weight:700; letter-spacing:.02em; margin-top:14px;}
+  .hero .tagline{color:var(--ink-soft); font-size:13.5px; margin:4px 0 18px;}
+
+  .date-row{
+    display:flex; align-items:center; gap:10px;
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:10px 14px;
+    width:fit-content;
+  }
+  .date-row label{font-size:13px; color:var(--ink-soft); display:flex; align-items:center; gap:8px;}
+  .date-row input[type=date]{
+    font-family:'JetBrains Mono', monospace;
+    font-size:14px;
+    border:none;
+    background:transparent;
+    color:var(--ink);
+  }
+
+  /* ---------- CARDS ---------- */
+  .card{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:20px 20px 22px;
+    margin-bottom:16px;
+    box-shadow:0 1px 0 rgba(30,42,38,0.03);
+  }
+  .card-head{display:flex; align-items:flex-start; gap:14px; margin-bottom:16px;}
+  .card-head .titles{flex:1;}
+  .card-head h2{font-size:19px;}
+  .card-head .sub{color:var(--ink-soft); font-size:12.5px; margin-top:3px;}
+
+  .icon-badge{
+    width:44px; height:44px; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+  }
+
+  .status-pill{
+    align-self:center;
+    font-family:'JetBrains Mono', monospace;
+    font-size:12px; font-weight:600;
+    padding:5px 11px;
+    border-radius:999px;
+    white-space:nowrap;
+  }
+  .status-normal{color:var(--accent-normal); background:var(--accent-normal-bg);}
+  .status-warn{color:var(--accent-warn); background:var(--accent-warn-bg);}
+  .status-alert{color:var(--accent-alert); background:var(--accent-alert-bg);}
+  .status-low{color:var(--accent-low); background:var(--accent-low-bg);}
+
+  /* ---------- SLIDERS ---------- */
+  .slider-grid{display:grid; grid-template-columns:1fr 1fr; gap:18px;}
+  @media (max-width:520px){ .slider-grid{grid-template-columns:1fr;} }
+
+  .time-block{border-left:2px solid var(--line); padding-left:14px;}
+  .time-block h3{
+    font-family:'JetBrains Mono', monospace;
+    font-size:11.5px; letter-spacing:.12em; text-transform:uppercase;
+    color:var(--ink-soft); font-weight:600; margin-bottom:10px;
+  }
+
+  .slider-row{margin-bottom:14px;}
+  .slider-row:last-child{margin-bottom:0;}
+  .slider-row .label-line{
+    display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px;
+  }
+  .slider-row .label-line span.name{font-size:13px; color:var(--ink);}
+  .slider-row .value-wrap{display:flex; align-items:baseline; gap:3px;}
+  .slider-row input[type=number]{
+    width:48px; text-align:right;
+    font-family:'JetBrains Mono', monospace; font-size:15px; font-weight:600;
+    border:none; background:transparent; color:var(--ink);
+    -moz-appearance:textfield;
+  }
+  .slider-row input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none; margin:0;}
+  .slider-row .unit{font-size:11px; color:var(--ink-soft);}
+
+  input[type=range]{
+    -webkit-appearance:none; appearance:none;
+    width:100%; height:4px;
+    border-radius:2px;
+    background:var(--line);
+    outline:none;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;
+    width:18px; height:18px; border-radius:50%;
+    background:var(--slider-color, var(--ink));
+    border:3px solid var(--card);
+    box-shadow:0 0 0 1.5px var(--slider-color, var(--ink));
+    cursor:pointer;
+    margin-top:-7px;
+  }
+  input[type=range]::-moz-range-thumb{
+    width:16px; height:16px; border-radius:50%;
+    background:var(--slider-color, var(--ink));
+    border:3px solid var(--card);
+    box-shadow:0 0 0 1.5px var(--slider-color, var(--ink));
+    cursor:pointer;
+  }
+  input[type=range]::-webkit-slider-runnable-track{height:4px; border-radius:2px;}
+  #bp-section input[type=range]{--slider-color:var(--bp-accent);}
+  #pulse-section input[type=range]{--slider-color:var(--pulse-accent);}
+
+  .range-hint{font-size:11px; color:var(--ink-soft); margin-top:4px;}
+
+  /* ---------- DIARY ---------- */
+  #diary-section textarea{
+    width:100%; min-height:140px;
+    border:none; resize:vertical;
+    background:transparent;
+    font-family:'Noto Sans TC', sans-serif;
+    font-size:14.5px; line-height:34px;
+    color:var(--ink);
+    background-image:linear-gradient(var(--line) 1px, transparent 1px);
+    background-size:100% 34px;
+    padding-top:2px;
+  }
+  #diary-section textarea:focus{outline:none;}
+
+  /* ---------- RECENT LIST ---------- */
+  .recent-card h2{font-size:16px; margin-bottom:4px;}
+  .recent-card .sub{color:var(--ink-soft); font-size:12px; margin-bottom:14px;}
+  .recent-list{display:flex; flex-direction:column; gap:8px;}
+  .recent-empty{color:var(--ink-soft); font-size:13px; padding:8px 0;}
+  .recent-row{
+    display:flex; align-items:center; gap:10px;
+    border:1px solid var(--line); border-radius:10px;
+    padding:9px 12px;
+    cursor:pointer;
+    transition:background .15s;
+  }
+  .recent-row:hover{background:var(--accent-normal-bg);}
+  .recent-row .rdate{font-family:'JetBrains Mono', monospace; font-size:12.5px; width:76px; flex-shrink:0;}
+  .recent-row .rbp{font-family:'JetBrains Mono', monospace; font-size:12px; color:var(--ink-soft); flex:1;}
+  .recent-row .rdel{
+    border:none; background:transparent; color:var(--ink-soft);
+    font-size:15px; cursor:pointer; padding:2px 6px; border-radius:6px;
+  }
+  .recent-row .rdel:hover{color:var(--accent-alert); background:var(--accent-alert-bg);}
+
+  /* ---------- ACTION BAR ---------- */
+  .action-bar{
+    position:fixed; left:0; right:0; bottom:0;
+    display:flex; justify-content:center; gap:12px;
+    padding:14px 16px calc(14px + env(safe-area-inset-bottom));
+    background:linear-gradient(to top, var(--paper) 60%, transparent);
+  }
+  .btn{
+    font-family:'Noto Sans TC', sans-serif;
+    font-size:14.5px; font-weight:700;
+    padding:13px 22px; border-radius:11px; border:none;
+    cursor:pointer; transition:transform .1s, opacity .15s;
+  }
+  .btn:active{transform:scale(0.97);}
+  .btn-primary{background:var(--ink); color:var(--paper);}
+  .btn-secondary{background:var(--card); color:var(--ink); border:1.5px solid var(--ink);}
+  .btn:disabled{opacity:.5; cursor:default;}
+
+  .toast{
+    position:fixed; left:50%; bottom:82px; transform:translateX(-50%) translateY(8px);
+    background:var(--ink); color:var(--paper);
+    font-size:13px; padding:9px 16px; border-radius:999px;
+    opacity:0; pointer-events:none; transition:opacity .2s, transform .2s;
+  }
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+  .toast.error{background:var(--accent-alert);}
+
+  /* ---------- ICONS / MOTION ---------- */
+  .beat-heart{animation:beatScale var(--beat-duration) ease-in-out infinite;}
+  @keyframes beatScale{
+    0%{transform:scale(1);} 14%{transform:scale(1.16);} 28%{transform:scale(0.98);}
+    42%{transform:scale(1.1);} 60%{transform:scale(1);} 100%{transform:scale(1);}
+  }
+  .cuff-needle{transform-origin:22px 24px; animation:needleSwing 2.4s ease-in-out infinite;}
+  @keyframes needleSwing{
+    0%,100%{transform:rotate(-14deg);} 50%{transform:rotate(12deg);}
+  }
+  .pencil-line{stroke-dasharray:30; stroke-dashoffset:30; animation:writeLine 2.6s ease-in-out infinite;}
+  @keyframes writeLine{
+    0%{stroke-dashoffset:30;} 45%{stroke-dashoffset:0;} 70%{stroke-dashoffset:0;} 100%{stroke-dashoffset:-30;}
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    .beat-heart, .cuff-needle, .pencil-line, .ecg-strip{animation:none !important;}
+  }
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  <header class="hero">
+    <div class="ecg-track">
+      <div class="ecg-strip" id="ecgStrip">
+        <svg viewBox="0 0 400 54" preserveAspectRatio="none"><polyline points="0,27 60,27 78,27 88,8 98,46 108,14 118,27 400,27" fill="none" stroke="#B8433A" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>
+        <svg viewBox="0 0 400 54" preserveAspectRatio="none"><polyline points="0,27 60,27 78,27 88,8 98,46 108,14 118,27 400,27" fill="none" stroke="#B8433A" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>
+      </div>
+    </div>
+    <h1>血壓脈搏日記</h1>
+    <p class="tagline">每天記錄兩次血壓與脈搏，寫下今天的身體感受</p>
+    <div class="date-row">
+      <label>紀錄日期
+        <input type="date" id="dateInput">
+      </label>
+    </div>
+  </header>
+
+  <main>
+    <!-- 血壓 -->
+    <section class="card" id="bp-section">
+      <div class="card-head">
+        <span class="icon-badge" aria-hidden="true">
+          <svg width="40" height="40" viewBox="0 0 44 44">
+            <circle cx="22" cy="24" r="15" fill="none" stroke="#3E6FA8" stroke-width="2.5"/>
+            <g class="cuff-needle"><line x1="22" y1="24" x2="22" y2="12" stroke="#3E6FA8" stroke-width="2.5" stroke-linecap="round"/></g>
+            <circle cx="22" cy="24" r="2" fill="#3E6FA8"/>
+            <path d="M14 6 h16" stroke="#3E6FA8" stroke-width="2.5" stroke-linecap="round"/>
+          </svg>
+        </span>
+        <div class="titles">
+          <h2>血壓</h2>
+          <p class="sub">收縮壓 / 舒張壓（mmHg），早晚各測一次</p>
+        </div>
+        <span class="status-pill status-normal" id="bpStatusPill">正常</span>
+      </div>
+
+      <div class="slider-grid">
+        <div class="time-block">
+          <h3>AM · 早上</h3>
+          <div class="slider-row">
+            <div class="label-line">
+              <span class="name">收縮壓</span>
+              <div class="value-wrap"><input type="number" id="sysAM" min="70" max="220" value="120"><span class="unit">mmHg</span></div>
+            </div>
+            <input type="range" id="sysAMRange" min="70" max="220" value="120">
+          </div>
+          <div class="slider-row">
+            <div class="label-line">
+              <span class="name">舒張壓</span>
+              <div class="value-wrap"><input type="number" id="diaAM" min="40" max="130" value="80"><span class="unit">mmHg</span></div>
+            </div>
+            <input type="range" id="diaAMRange" min="40" max="130" value="80">
+          </div>
+        </div>
+        <div class="time-block">
+          <h3>PM · 晚上</h3>
+          <div class="slider-row">
+            <div class="label-line">
+              <span class="name">收縮壓</span>
+              <div class="value-wrap"><input type="number" id="sysPM" min="70" max="220" value="120"><span class="unit">mmHg</span></div>
+            </div>
+            <input type="range" id="sysPMRange" min="70" max="220" value="120">
+          </div>
+          <div class="slider-row">
+            <div class="label-line">
+              <span class="name">舒張壓</span>
+              <div class="value-wrap"><input type="number" id="diaPM" min="40" max="130" value="80"><span class="unit">mmHg</span></div>
+            </div>
+            <input type="range" id="diaPMRange" min="40" max="130" value="80">
+          </div>
+        </div>
+      </div>
+      <p class="range-hint">正常參考：收縮壓 &lt;120 且舒張壓 &lt;80；≥140 或 ≥90 視為異常偏高</p>
+    </section>
+
+    <!-- 心搏 / 脈搏 -->
+    <section class="card" id="pulse-section">
+      <div class="card-head">
+        <span class="icon-badge" aria-hidden="true">
+          <svg class="beat-heart" width="36" height="36" viewBox="0 0 44 44">
+            <path d="M22 37 C10 28, 4 20, 4 13.5 C4 7, 9 3, 14.5 3 C18.5 3, 21 5.5, 22 8 C23 5.5, 25.5 3, 29.5 3 C35 3, 40 7, 40 13.5 C40 20, 34 28, 22 37 Z" fill="#B8433A"/>
+          </svg>
+        </span>
+        <div class="titles">
+          <h2>心搏 / 脈搏</h2>
+          <p class="sub">每分鐘心跳次數（bpm），早晚各測一次</p>
+        </div>
+      </div>
+
+      <div class="slider-grid">
+        <div class="time-block">
+          <h3>AM · 早上</h3>
+          <div class="slider-row">
+            <div class="label-line">
+              <span class="name">脈搏</span>
+              <div class="value-wrap"><input type="number" id="pulseAM" min="40" max="160" value="72"><span class="unit">bpm</span></div>
+            </div>
+            <input type="range" id="pulseAMRange" min="40" max="160" value="72">
+          </div>
+        </div>
+        <div class="time-block">
+          <h3>PM · 晚上</h3>
+          <div class="slider-row">
+            <div class="label-line">
+              <span class="name">脈搏</span>
+              <div class="value-wrap"><input type="number" id="pulsePM" min="40" max="160" value="72"><span class="unit">bpm</span></div>
+            </div>
+            <input type="range" id="pulsePMRange" min="40" max="160" value="72">
+          </div>
+        </div>
+      </div>
+      <p class="range-hint">一般成人靜息心率參考範圍：60–100 bpm</p>
+    </section>
+
+    <!-- 日記 -->
+    <section class="card" id="diary-section">
+      <div class="card-head">
+        <span class="icon-badge" aria-hidden="true">
+          <svg width="36" height="36" viewBox="0 0 44 44">
+            <path d="M8 33 L27 14 L33 20 L14 39 L7 40 Z" fill="none" stroke="#7A6A3E" stroke-width="2.2" stroke-linejoin="round"/>
+            <line class="pencil-line" x1="10" y1="36" x2="34" y2="12" stroke="#7A6A3E" stroke-width="1.4" stroke-dasharray="30"/>
+          </svg>
+        </span>
+        <div class="titles">
+          <h2>今日日記</h2>
+          <p class="sub">寫下今天的身體感受、睡眠、飲食或用藥狀況</p>
+        </div>
+      </div>
+      <textarea id="diaryInput" placeholder="今天感覺如何？"></textarea>
+    </section>
+
+    <!-- 最近紀錄 -->
+    <section class="card recent-card">
+      <h2>最近紀錄</h2>
+      <p class="sub">點選可載入編輯，共顯示最近 7 筆</p>
+      <div class="recent-list" id="recentList">
+        <p class="recent-empty">尚無紀錄</p>
+      </div>
+    </section>
+  </main>
+
+</div>
+
+<div class="action-bar">
+  <button class="btn btn-secondary" id="reportBtn">生成報表</button>
+  <button class="btn btn-primary" id="saveBtn">儲存</button>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+
+  const dateInput = $('dateInput');
+  const fields = {
+    sysAM:['sysAM','sysAMRange'], diaAM:['diaAM','diaAMRange'],
+    sysPM:['sysPM','sysPMRange'], diaPM:['diaPM','diaPMRange'],
+    pulseAM:['pulseAM','pulseAMRange'], pulsePM:['pulsePM','pulsePMRange']
+  };
+  const diaryInput = $('diaryInput');
+  const bpStatusPill = $('bpStatusPill');
+  const toastEl = $('toast');
+  const saveBtn = $('saveBtn');
+  const reportBtn = $('reportBtn');
+  const recentList = $('recentList');
+  const ecgStrip = $('ecgStrip');
+
+  function todayStr(){
+    return new Date().toLocaleDateString('sv-SE'); // YYYY-MM-DD, local time
+  }
+
+  function showToast(msg, type){
+    toastEl.textContent = msg;
+    toastEl.className = 'toast show' + (type === 'error' ? ' error' : '');
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(() => toastEl.classList.remove('show'), 2600);
+  }
+
+  // ---------- slider <-> number sync ----------
+  function syncPair(numId, rangeId){
+    const num = $(numId), range = $(rangeId);
+    const clamp = v => Math.min(+range.max, Math.max(+range.min, v));
+    num.addEventListener('input', () => { range.value = clamp(+num.value || 0); onValuesChanged(); });
+    num.addEventListener('blur', () => { num.value = range.value; });
+    range.addEventListener('input', () => { num.value = range.value; onValuesChanged(); });
+  }
+  Object.values(fields).forEach(([n, r]) => syncPair(n, r));
+
+  function getVal(id){ return Number($(id).value); }
+
+  // ---------- classification ----------
+  function classifyBP(sys, dia){
+    if (sys < 90 || dia < 60) return { label: '偏低', cls: 'status-low' };
+    if (sys >= 140 || dia >= 90) return { label: '異常(高血壓)', cls: 'status-alert' };
+    if (sys >= 120 || dia >= 80) return { label: '偏高', cls: 'status-warn' };
+    return { label: '正常', cls: 'status-normal' };
+  }
+
+  function onValuesChanged(){
+    const am = classifyBP(getVal('sysAM'), getVal('diaAM'));
+    const pm = classifyBP(getVal('sysPM'), getVal('diaPM'));
+    const worst = [am, pm].sort((a,b) => severity(b.cls) - severity(a.cls))[0];
+    bpStatusPill.textContent = am.label === pm.label ? am.label : `早:${am.label} 晚:${pm.label}`;
+    bpStatusPill.className = 'status-pill ' + worst.cls;
+    updateBeatSpeed();
+  }
+  function severity(cls){
+    return { 'status-normal':0, 'status-warn':1, 'status-low':1, 'status-alert':2 }[cls] ?? 0;
+  }
+
+  function updateBeatSpeed(){
+    const avg = (getVal('pulseAM') + getVal('pulsePM')) / 2 || 72;
+    const beat = Math.min(2.2, Math.max(0.5, 60 / avg));
+    document.documentElement.style.setProperty('--beat-duration', beat + 's');
+    document.documentElement.style.setProperty('--ecg-duration', (beat * 7.5) + 's');
+  }
+
+  // ---------- storage helpers ----------
+  const KEY_PREFIX = 'entry:';
+
+  function currentEntry(){
+    return {
+      date: dateInput.value,
+      bp_am: { sys: getVal('sysAM'), dia: getVal('diaAM') },
+      bp_pm: { sys: getVal('sysPM'), dia: getVal('diaPM') },
+      pulse_am: getVal('pulseAM'),
+      pulse_pm: getVal('pulsePM'),
+      diary: diaryInput.value,
+      savedAt: new Date().toISOString()
+    };
+  }
+
+  function applyEntry(entry){
+    $('sysAM').value = entry.bp_am.sys; $('sysAMRange').value = entry.bp_am.sys;
+    $('diaAM').value = entry.bp_am.dia; $('diaAMRange').value = entry.bp_am.dia;
+    $('sysPM').value = entry.bp_pm.sys; $('sysPMRange').value = entry.bp_pm.sys;
+    $('diaPM').value = entry.bp_pm.dia; $('diaPMRange').value = entry.bp_pm.dia;
+    $('pulseAM').value = entry.pulse_am; $('pulseAMRange').value = entry.pulse_am;
+    $('pulsePM').value = entry.pulse_pm; $('pulsePMRange').value = entry.pulse_pm;
+    diaryInput.value = entry.diary || '';
+    onValuesChanged();
+  }
+
+  function resetDefaults(){
+    applyEntry({
+      bp_am:{sys:120,dia:80}, bp_pm:{sys:120,dia:80},
+      pulse_am:72, pulse_pm:72, diary:''
+    });
+  }
+
+  async function loadEntry(date){
+    try{
+      const res = await window.storage.get(KEY_PREFIX + date, false);
+      if (res && res.value) applyEntry(JSON.parse(res.value));
+      else resetDefaults();
+    }catch(e){
+      resetDefaults();
+    }
+  }
+
+  async function saveEntry(){
+    if (!dateInput.value){ showToast('請先選擇日期', 'error'); return; }
+    saveBtn.disabled = true;
+    try{
+      const entry = currentEntry();
+      const res = await window.storage.set(KEY_PREFIX + entry.date, JSON.stringify(entry), false);
+      if (res) { showToast('已儲存 ' + entry.date); refreshRecentList(); }
+      else showToast('儲存失敗，請再試一次', 'error');
+    }catch(e){
+      console.error(e);
+      showToast('儲存失敗，請再試一次', 'error');
+    }finally{
+      saveBtn.disabled = false;
+    }
+  }
+
+  async function deleteEntry(date, ev){
+    ev.stopPropagation();
+    if (!confirm(`確定要刪除 ${date} 的紀錄嗎？`)) return;
+    try{
+      const res = await window.storage.get(KEY_PREFIX + date, false);
+      if (res){
+        await window.storage.delete(KEY_PREFIX + date, false);
+        showToast('已刪除 ' + date);
+        refreshRecentList();
+        if (dateInput.value === date) resetDefaults();
+      }
+    }catch(e){
+      showToast('刪除失敗', 'error');
+    }
+  }
+
+  async function refreshRecentList(){
+    recentList.innerHTML = '<p class="recent-empty">載入中…</p>';
+    try{
+      const listRes = await window.storage.list(KEY_PREFIX, false);
+      if (!listRes || !listRes.keys || listRes.keys.length === 0){
+        recentList.innerHTML = '<p class="recent-empty">尚無紀錄</p>';
+        return;
+      }
+      const keys = listRes.keys.sort().reverse().slice(0, 7);
+      const entries = [];
+      for (const k of keys){
+        try{
+          const r = await window.storage.get(k, false);
+          if (r && r.value) entries.push(JSON.parse(r.value));
+        }catch(e){}
+      }
+      renderRecentList(entries);
+    }catch(e){
+      console.error(e);
+      recentList.innerHTML = '<p class="recent-empty">載入紀錄時發生錯誤</p>';
+    }
+  }
+
+  function renderRecentList(entries){
+    recentList.innerHTML = '';
+    if (entries.length === 0){
+      recentList.innerHTML = '<p class="recent-empty">尚無紀錄</p>';
+      return;
+    }
+    entries.forEach(e => {
+      const am = classifyBP(e.bp_am.sys, e.bp_am.dia);
+      const pm = classifyBP(e.bp_pm.sys, e.bp_pm.dia);
+      const row = document.createElement('div');
+      row.className = 'recent-row';
+      row.addEventListener('click', () => { dateInput.value = e.date; loadEntry(e.date); });
+
+      const dateEl = document.createElement('span');
+      dateEl.className = 'rdate';
+      dateEl.textContent = e.date;
+
+      const infoEl = document.createElement('span');
+      infoEl.className = 'rbp';
+      infoEl.textContent = `早 ${e.bp_am.sys}/${e.bp_am.dia}(${am.label}) · 晚 ${e.bp_pm.sys}/${e.bp_pm.dia}(${pm.label}) · 脈 ${e.pulse_am}/${e.pulse_pm}`;
+
+      const delBtn = document.createElement('button');
+      delBtn.className = 'rdel';
+      delBtn.textContent = '✕';
+      delBtn.title = '刪除這筆紀錄';
+      delBtn.addEventListener('click', (ev) => deleteEntry(e.date, ev));
+
+      row.appendChild(dateEl);
+      row.appendChild(infoEl);
+      row.appendChild(delBtn);
+      recentList.appendChild(row);
+    });
+  }
+
+  // ---------- report ----------
+  async function generateReport(){
+    reportBtn.disabled = true;
+    const originalText = reportBtn.textContent;
+    reportBtn.textContent = '產生中…';
+    try{
+      const listRes = await window.storage.list(KEY_PREFIX, false);
+      if (!listRes || !listRes.keys || listRes.keys.length === 0){
+        showToast('尚無資料可匯出', 'error');
+        return;
+      }
+      const keys = listRes.keys.sort();
+      const rows = [['日期時間戳記','血壓(早上)','血壓(晚上)','脈搏(早上)','脈搏(晚上)','血壓正常與否','日記']];
+      for (const k of keys){
+        try{
+          const r = await window.storage.get(k, false);
+          if (!r || !r.value) continue;
+          const e = JSON.parse(r.value);
+          const am = classifyBP(e.bp_am.sys, e.bp_am.dia);
+          const pm = classifyBP(e.bp_pm.sys, e.bp_pm.dia);
+          const statusStr = am.label === pm.label ? am.label : `早:${am.label} / 晚:${pm.label}`;
+          rows.push([
+            e.date,
+            `${e.bp_am.sys}/${e.bp_am.dia}`,
+            `${e.bp_pm.sys}/${e.bp_pm.dia}`,
+            e.pulse_am,
+            e.pulse_pm,
+            statusStr,
+            e.diary || ''
+          ]);
+        }catch(err){}
+      }
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      ws['!cols'] = [{wch:13},{wch:12},{wch:12},{wch:10},{wch:10},{wch:22},{wch:40}];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, '血壓脈搏紀錄');
+      XLSX.writeFile(wb, `血壓脈搏日記_${todayStr()}.xlsx`);
+      showToast('報表已下載');
+    }catch(e){
+      console.error(e);
+      showToast('生成報表失敗，請再試一次', 'error');
+    }finally{
+      reportBtn.disabled = false;
+      reportBtn.textContent = originalText;
+    }
+  }
+
+  saveBtn.addEventListener('click', saveEntry);
+  reportBtn.addEventListener('click', generateReport);
+  dateInput.addEventListener('change', () => loadEntry(dateInput.value));
+
+  // ---------- init ----------
+  dateInput.value = todayStr();
+  loadEntry(dateInput.value);
+  refreshRecentList();
+  onValuesChanged();
+})();
+</script>
+
+</body>
+</html>
